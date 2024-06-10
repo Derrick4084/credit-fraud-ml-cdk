@@ -64,5 +64,5 @@ def lambda_handler(event, context):
 
     return {
         'statusCode': 200,
-        'body': json.dumps('State has been started')
+        'body': json.dumps('State machine has been started')
     }

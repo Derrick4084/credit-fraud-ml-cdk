@@ -23,7 +23,6 @@ class CardFraudMlStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        sagemaker_endpoint_name = "credit-card-fraud-endpoint"
         random_number = random.randint(1000, 2000)   
         # create s3 bucket
         raw_data_bucket = _s3.Bucket(self, "raw-data-bucket",
@@ -38,21 +37,21 @@ class CardFraudMlStack(Stack):
             stream_mode=_kinesis.StreamMode.ON_DEMAND,
             removal_policy=RemovalPolicy.DESTROY           
         )
+
         results_dynamo_db = dynamodb.Table(self, "card-fraud-table",
             table_name="creditcard-fraud",
             partition_key=dynamodb.Attribute(name="id", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY
         )
+
         bucket_dynamo_db = dynamodb.Table(self, "bucket-table",
             table_name="bucket-info",
             partition_key=dynamodb.Attribute(name="bucketname", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY
         )
-
-
-        
+       
         lambda_role = _iam.Role(self, "LambdaRole",
             assumed_by=_iam.ServicePrincipal("lambda.amazonaws.com"),
             role_name="LambdaRole",
@@ -70,13 +69,6 @@ class CardFraudMlStack(Stack):
                         resources=["arn:aws:s3:::*/*"]
                     )
                 ]),
-                # "dynamodb_access": _iam.PolicyDocument(statements=[
-                #     _iam.PolicyStatement(
-                #         effect=_iam.Effect.ALLOW,
-                #         actions=["dynamodb:*"],
-                #         resources=["*"]
-                #     )
-                # ]),
                 "logs_access": _iam.PolicyDocument(statements=[
                     _iam.PolicyStatement(
                         effect=_iam.Effect.ALLOW,
@@ -88,7 +80,7 @@ class CardFraudMlStack(Stack):
                 ])
             })
         
-        sagemaker_layer = lambda_.LayerVersion(self, "sagemaker-layer]",
+        sagemaker_lambda_layer = lambda_.LayerVersion(self, "sagemaker-layer]",
             removal_policy=RemovalPolicy.DESTROY,
             code=lambda_.Code.from_asset("lambda_layers/sagemaker.zip"),
             layer_version_name="sagemaker-layer",
@@ -100,6 +92,7 @@ class CardFraudMlStack(Stack):
             removal_policy = RemovalPolicy.DESTROY,
             log_group_name=f"/aws/lambda/dataprep-{random_number}"
         )
+
         dataprep_lambda_log_group.add_to_resource_policy(
             _iam.PolicyStatement(
                 effect=_iam.Effect.ALLOW,
@@ -109,7 +102,8 @@ class CardFraudMlStack(Stack):
                          ],
                 resources=[f"arn:aws:logs:{Aws.REGION}:{Aws.ACCOUNT_ID}:log-group:/aws/lambda/dataprep-{random_number}:*"],
             )
-        )        
+        )
+
         dataprep_lambda = lambda_.Function(self, "dataprep-lambda",
             runtime=lambda_.Runtime.PYTHON_3_9,
             handler="prep-data.lambda_handler",
@@ -117,12 +111,11 @@ class CardFraudMlStack(Stack):
             role=lambda_role,
             function_name=f"data-retrieval-{random_number}",
             timeout=Duration.seconds(60),
-            layers=[sagemaker_layer],
+            layers=[sagemaker_lambda_layer],
             log_group=dataprep_lambda_log_group,
             memory_size=2048,
         )
-
-               
+              
         startstate_lambda_role = _iam.Role(self, "StartStatePutEventsRole",
             assumed_by=_iam.ServicePrincipal("lambda.amazonaws.com"),
             role_name="StartStatePutEventsRole",
@@ -154,6 +147,7 @@ class CardFraudMlStack(Stack):
             removal_policy = RemovalPolicy.DESTROY,
             log_group_name=f"/aws/lambda/startstate-{random_number}"
         )
+
         startstate_lambda_log_group.add_to_resource_policy(
             _iam.PolicyStatement(
                 effect=_iam.Effect.ALLOW,
@@ -164,6 +158,7 @@ class CardFraudMlStack(Stack):
                 resources=[f"arn:aws:logs:{Aws.REGION}:{Aws.ACCOUNT_ID}:log-group:/aws/lambda/startstate-{random_number}:*"],
             )
         )
+
         startstate_lambda = lambda_.Function(self, "startstate-lambda",
             runtime=lambda_.Runtime.PYTHON_3_9,
             handler="start-state.lambda_handler",
@@ -171,7 +166,7 @@ class CardFraudMlStack(Stack):
             role=startstate_lambda_role,
             function_name=f"start-state-{random_number}",
             timeout=Duration.seconds(60),
-            layers=[sagemaker_layer],
+            layers=[sagemaker_lambda_layer],
             log_group=startstate_lambda_log_group,
             memory_size=256,
             environment={
@@ -181,13 +176,16 @@ class CardFraudMlStack(Stack):
             }
         )
         
-        dataprep_notification = aws_s3_notifications.LambdaDestination(startstate_lambda)    
+        dataprep_notification = aws_s3_notifications.LambdaDestination(startstate_lambda)
+
         raw_data_bucket.add_event_notification(_s3.EventType.OBJECT_CREATED_COMPLETE_MULTIPART_UPLOAD, dataprep_notification,
             _s3.NotificationKeyFilter(suffix=".csv")
         )
         raw_data_bucket.add_event_notification(_s3.EventType.OBJECT_CREATED_PUT, dataprep_notification,
             _s3.NotificationKeyFilter(suffix=".csv")
         )
+
+        sagemaker_endpoint_name = "credit-card-fraud-endpoint"
            
         sagemaker_execution_role = _iam.Role(self, "sagemaker-execution-role",
             assumed_by=_iam.ServicePrincipal("sagemaker.amazonaws.com"),
@@ -326,7 +324,6 @@ class CardFraudMlStack(Stack):
             state_name="Create Endpoint"
         )
         
-
         state_machine_chain = dataprep_task.next(training_job_task) \
                              .next(create_model_task) \
                              .next(endpoint_config_task) \
@@ -340,7 +337,8 @@ class CardFraudMlStack(Stack):
                 _iam.ManagedPolicy.from_aws_managed_policy_name("AmazonS3FullAccess")
             ],
             role_name=f"state-machine-role-{random_number}",
-         ) 
+         )
+        
         state_machine = sfn.StateMachine(self, "credit-card-fraud-state-machine",
             definition_body=sfn.DefinitionBody.from_chainable(state_machine_chain),
             state_machine_name="credit-card-fraud-state-machine",
@@ -348,9 +346,6 @@ class CardFraudMlStack(Stack):
             timeout=Duration.minutes(60),
             removal_policy=RemovalPolicy.DESTROY    
         )
-
-
-        
 
         consumer_lambda_role = _iam.Role(self, "ConsumerLambdaRole",
             assumed_by=_iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -391,6 +386,7 @@ class CardFraudMlStack(Stack):
             removal_policy = RemovalPolicy.DESTROY,
             log_group_name=f"/aws/lambda/consumer-{random_number}"
         )
+
         consumer_lambda_log_group.add_to_resource_policy(
             _iam.PolicyStatement(
                 effect=_iam.Effect.ALLOW,
@@ -401,6 +397,7 @@ class CardFraudMlStack(Stack):
                 resources=[f"arn:aws:logs:{Aws.REGION}:{Aws.ACCOUNT_ID}:log-group:/aws/lambda/consumer-{random_number}:*"],
             )
         )
+
         consumer_lambda_event_source = aws_lambda_event_sources.KinesisEventSource(
             kinesis_stream,
             starting_position=lambda_.StartingPosition.LATEST,
@@ -408,7 +405,8 @@ class CardFraudMlStack(Stack):
             parallelization_factor=1,
             max_batching_window=Duration.seconds(60),
             retry_attempts=3
-        )    
+        )
+
         consumer_lambda = lambda_.Function(self, "consumer-lambda",
             runtime=lambda_.Runtime.PYTHON_3_9,
             handler="cardfraud-consumer.lambda_handler",
@@ -426,7 +424,6 @@ class CardFraudMlStack(Stack):
             }
         )
         consumer_lambda.add_event_source(consumer_lambda_event_source)
-
 
         generator_lambda_role = _iam.Role(self, "GeneratorLambdaRole",
             assumed_by=_iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -465,6 +462,7 @@ class CardFraudMlStack(Stack):
             removal_policy = RemovalPolicy.DESTROY,
             log_group_name=f"/aws/lambda/generator-{random_number}"
         )
+
         generator_lambda_log_group.add_to_resource_policy(
             _iam.PolicyStatement(
                 effect=_iam.Effect.ALLOW,
@@ -475,7 +473,7 @@ class CardFraudMlStack(Stack):
                 resources=[f"arn:aws:logs:{Aws.REGION}:{Aws.ACCOUNT_ID}:log-group:/aws/lambda/generator-{random_number}:*"],
             )
         )
-
+        
         generator_lambda = lambda_.Function(self, "generator-lambda",
             runtime=lambda_.Runtime.PYTHON_3_9,
             handler="record-generator.lambda_handler",
