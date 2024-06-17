@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-import os
-
 import aws_cdk as cdk
+from card_fraud_ml.statemachine_stack import CardFraudStateMachineStack
+from card_fraud_ml.lambda_stack import CardFraudLambdaStack
 
-from card_fraud_ml.card_fraud_ml_stack import CardFraudMlStack
+raw_bucket_name = f"card-fraud-raw-data-{cdk.Aws.ACCOUNT_ID}"
+dynamodb_bucket_info = "card-fraud-raw-bucket-info"
+dynamodb_fraud_table = "card-fraud-response"
+kinesis_stream_name = "card-fraud-stream"
+state_machine_name = "card-fraud-state-machine"
+sagemaker_endpoint_name = "card-fraud-endpoint"
 
+param_dict = {
+  "raw_bucket_name": raw_bucket_name,
+  "dynamodb_bucket_info": dynamodb_bucket_info,
+  "dynamodb_fraud_table": dynamodb_fraud_table,
+  "kinesis_stream_name": kinesis_stream_name,
+  "state_machine_name": state_machine_name,
+  "sagemaker_endpoint_name": sagemaker_endpoint_name,
+}
 
 app = cdk.App()
-CardFraudMlStack(app, "CardFraudMlStack",
-    # If you don't specify 'env', this stack will be environment-agnostic.
-    # Account/Region-dependent features and context lookups will not work,
-    # but a single synthesized template can be deployed anywhere.
 
-    # Uncomment the next line to specialize this stack for the AWS Account
-    # and Region that are implied by the current CLI configuration.
+CardFraudLambdaStack(app, "CardFraudLambdaStack", stack_params=param_dict)
+CardFraudStateMachineStack(app, "CardFraudStateMachineStack", stack_params=param_dict)
 
-    #env=cdk.Environment(account=os.getenv('CDK_DEFAULT_ACCOUNT'), region=os.getenv('CDK_DEFAULT_REGION')),
-
-    # Uncomment the next line if you know exactly what Account and Region you
-    # want to deploy the stack to. */
-
-    #env=cdk.Environment(account='123456789012', region='us-east-1'),
-
-    # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
-    )
 
 app.synth()

@@ -2,7 +2,6 @@ import boto3
 import csv
 import os
 
-
 s3_client = boto3.client('s3')
 kinesis_client = boto3.client('kinesis')
 dynamodb_client = boto3.resource('dynamodb')
@@ -25,8 +24,6 @@ def get_item_dynamodb(bucketname):
         print(f"Oops, could not get: {msg}")
         return msg
     
-
-
 
 def lambda_handler(event, context):
 

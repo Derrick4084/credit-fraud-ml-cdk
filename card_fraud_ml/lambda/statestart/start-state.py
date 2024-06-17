@@ -19,8 +19,6 @@ s3_model_test_path = os.path.join("s3://", sagemaker_bucket, s3_model_test)
 
 STATE_MACHINE_ARN = os.environ['STATE_MACHINE_ARN']
 DYNAMODB_TABLENAME = os.environ['DYNAMODB_TABLENAME']
-# BUCKET_NAME = os.environ['BUCKET_NAME']
-
 
 def put_item_dynamodb(rawbucket, rawkey):
     dynamodb_client = boto3.client('dynamodb')
@@ -39,7 +37,6 @@ def lambda_handler(event, context):
     rawbucket = event["Records"][0]["s3"]["bucket"]["name"]
     rawkey = urllib.parse.unquote_plus(event["Records"][0]["s3"]["object"]["key"], encoding='utf-8')
 
-
     put_item_dynamodb(rawbucket, rawkey)
     
     statemachine_payload = {
@@ -54,7 +51,6 @@ def lambda_handler(event, context):
         "smTrainKey": s3_train_key,
         "smTestKey": s3_test_key
     }
-
     
     response = sfn_client.start_execution(
         stateMachineArn=STATE_MACHINE_ARN,
